@@ -15,14 +15,22 @@ export class ReactAgent implements AgentStrategy {
 
         context.memory.addUserMessage(context.userInput);
 
+        let invalidToolCallRetries = 0;
         while (true) {
             context.memory.drainPendingMessages();
             const llmResponse = await context.model.chat(context.memory.getHistory(), context.tools.list());
 
             if (llmResponse.toolCalls && llmResponse.toolCalls.length > 0) {
                 context.memory.addAssistantMessage(llmResponse.content || "");
+                let hasParseError = false;
 
                 for (const call of llmResponse.toolCalls) {
+                    if (call.parseError) {
+                        hasParseError = true;
+                        context.memory.addToolResult(call.id, call.name || "unknown", call.parseError);
+                        continue;
+                    }
+
                     const tool = context.tools.get(call.name);
 
                     if (!tool) {
@@ -37,6 +45,15 @@ export class ReactAgent implements AgentStrategy {
                         const message = error instanceof Error ? error.message : "Unknown tool error";
                         context.memory.addToolResult(call.id, tool.name, `Tool failed: ${message}`);
                     }
+                }
+
+                if (hasParseError) {
+                    invalidToolCallRetries += 1;
+                    if (invalidToolCallRetries >= 2) {
+                        return "模型连续生成了无效的工具参数，请重试当前请求。";
+                    }
+                } else {
+                    invalidToolCallRetries = 0;
                 }
 
                 continue;

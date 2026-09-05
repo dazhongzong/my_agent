@@ -35,6 +35,7 @@ MODEL_PROVIDER=openai
 OPENAI_API_KEY=your_api_key_here
 OPENAI_BASE_URL=https://api.openai.com/v1
 OPENAI_MODEL=gpt-4o-mini
+CONTEXT_WINDOW_TOKENS=8192
 ```
 
 如果使用其他 OpenAI 兼容服务，只需要替换 `OPENAI_BASE_URL` 和 `OPENAI_MODEL`。
@@ -47,6 +48,8 @@ GITHUB_TOKEN=your_github_token_here
 GITHUB_BASE_URL=https://models.inference.ai.azure.com
 GITHUB_MODEL=openai/gpt-4o-mini
 ```
+
+`CONTEXT_WINDOW_TOKENS` 用于限制每次发送给模型的上下文大小，默认值为 `8192`。项目会优先保留系统提示和最近的消息，并在每次请求后显示本次发送上下文的估算 token 数；该数值基于文本长度估算，不等同于服务商的精确计费 token。
 
 不要把真实 API Key 或 Token 提交到 Git 仓库。
 

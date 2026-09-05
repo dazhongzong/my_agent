@@ -15,6 +15,10 @@ export const config = {
     process.env.MODEL_PROVIDER === "github"
       ? process.env.GITHUB_MODEL ?? process.env.OPENAI_MODEL ?? "openai/gpt-4o-mini"
       : process.env.OPENAI_MODEL ?? "gpt-4o-mini",
+  contextWindowTokens: Math.max(
+    1,
+    Number.parseInt(process.env.CONTEXT_WINDOW_TOKENS ?? "8192", 10) || 8192,
+  ),
   agentMode: (process.env.AGENT_MODE as AgentMode | undefined) ?? "react",
   systemPrompt:
     process.env.AGENT_SYSTEM_PROMPT ??

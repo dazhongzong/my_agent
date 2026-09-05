@@ -1,5 +1,6 @@
 ﻿import OpenAI from "openai";
 import type { LLMResponse, Message, Tool } from "../types.ts";
+import { trimMessagesToTokenLimit, type ContextUsage } from "./contextWindow.ts";
 
 export class OpenAICompatClient {
   private readonly client: OpenAI;
@@ -10,6 +11,7 @@ export class OpenAICompatClient {
     private readonly model: string,
     private readonly onReasoning?: (content: string) => void,
     private readonly onContent?: (content: string) => void,
+    private readonly contextWindowTokens = 8192,
   ) {
     const isGitHubProvider = this.baseUrl.includes("github") || this.baseUrl.includes("models.inference.ai.azure.com");
 
@@ -22,6 +24,17 @@ export class OpenAICompatClient {
         }
         : undefined,
     });
+
+    this.contextUsage = {
+      usedTokens: 0,
+      maxTokens: this.contextWindowTokens,
+    };
+  }
+
+  private contextUsage: ContextUsage;
+
+  getContextUsage(): ContextUsage {
+    return this.contextUsage;
   }
 
   private buildTools(tools: Tool[]) {
@@ -36,7 +49,10 @@ export class OpenAICompatClient {
   }
 
   async chat(messages: Message[], tools: Tool[]): Promise<LLMResponse> {
-    const sdkMessages = messages.map((message) => {
+    const limitedContext = trimMessagesToTokenLimit(messages, this.contextWindowTokens);
+    this.contextUsage = limitedContext.usage;
+
+    const sdkMessages = limitedContext.messages.map((message) => {
       if (message.role === "tool") {
         return {
           role: "tool" as const,
@@ -97,11 +113,15 @@ export class OpenAICompatClient {
       }
     }
 
-    const toolCalls = Array.from(toolCallParts.values()).map((call) => ({
-      id: call.id,
-      name: call.name,
-      arguments: this.parseToolArguments(call.arguments),
-    }));
+    const toolCalls = Array.from(toolCallParts.values()).map((call) => {
+      const parsedArguments = this.parseToolArguments(call.arguments);
+      return {
+        id: call.id,
+        name: call.name,
+        arguments: parsedArguments.arguments,
+        ...(parsedArguments.error ? { parseError: parsedArguments.error } : {}),
+      };
+    });
 
     return {
       content,
@@ -120,11 +140,26 @@ export class OpenAICompatClient {
     return typeof reasoning === "string" ? reasoning : "";
   }
 
-  private parseToolArguments(rawArguments: string): Record<string, any> {
+  private parseToolArguments(rawArguments: string): {
+    arguments: Record<string, any>;
+    error?: string;
+  } {
     try {
-      return JSON.parse(rawArguments || "{}");
-    } catch {
-      return { _raw: rawArguments };
+      const parsed = JSON.parse(rawArguments || "{}");
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        return {
+          arguments: {},
+          error: "工具参数必须是 JSON 对象。",
+        };
+      }
+
+      return { arguments: parsed as Record<string, any> };
+    } catch (error: unknown) {
+      const reason = error instanceof Error ? error.message : "JSON 解析失败";
+      return {
+        arguments: {},
+        error: `工具参数 JSON 无效，可能在输出中被截断：${reason}`,
+      };
     }
   }
 }

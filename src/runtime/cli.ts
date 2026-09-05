@@ -63,6 +63,7 @@ export async function runCli(): Promise<void> {
     (content) => {
       process.stdout.write(content);
     },
+    config.contextWindowTokens,
   );
   const promptBuilder = new PromptBuilder(config.systemPrompt);
   const memory = new SessionMemory(config.systemPrompt);
@@ -82,6 +83,10 @@ export async function runCli(): Promise<void> {
     } else {
       process.stdout.write("\n\n");
     }
+
+    const usage = client.getContextUsage();
+    const percentage = Math.round((usage.usedTokens / usage.maxTokens) * 100);
+    console.log(`[上下文] 当前使用约 ${usage.usedTokens} / ${usage.maxTokens} tokens (${percentage}%)`);
   };
 
   if (userInput) {

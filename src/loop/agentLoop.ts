@@ -26,14 +26,22 @@ export class AgentLoop {
 
     this.memory.addUserMessage(userInput);
 
+    let invalidToolCallRetries = 0;
     while (true) {
       this.memory.drainPendingMessages();
       const llmResponse = await this.model.chat(this.memory.getHistory(), this.tools.list());
 
       if (llmResponse.toolCalls && llmResponse.toolCalls.length > 0) {
         this.memory.addAssistantMessage(llmResponse.content || "");
+        let hasParseError = false;
 
         for (const call of llmResponse.toolCalls) {
+          if (call.parseError) {
+            hasParseError = true;
+            this.memory.addToolResult(call.id, call.name || "unknown", call.parseError);
+            continue;
+          }
+
           const tool = this.tools.get(call.name);
 
           if (!tool) {
@@ -48,6 +56,15 @@ export class AgentLoop {
             const message = error instanceof Error ? error.message : "Unknown tool error";
             this.memory.addToolResult(call.id, tool.name, `Tool failed: ${message}`);
           }
+        }
+
+        if (hasParseError) {
+          invalidToolCallRetries += 1;
+          if (invalidToolCallRetries >= 2) {
+            return "模型连续生成了无效的工具参数，请重试当前请求。";
+          }
+        } else {
+          invalidToolCallRetries = 0;
         }
 
         continue;
