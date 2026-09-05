@@ -1,0 +1,91 @@
+name: "Test Agent"
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-agent-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build TypeScript
+        run: npm run build
+
+      - name: Run Agent smoke test
+        run: |
+          node --input-type=module <<'EOF'
+          import { ReactAgent } from "./dist/agents/reactAgent.js";
+          import { PromptBuilder } from "./dist/prompt_builder/promptBuilder.js";
+          import { SessionMemory } from "./dist/memory/sessionMemory.js";
+          import { ToolRegistry } from "./dist/tool_registry/toolRegistry.js";
+
+          const tools = new ToolRegistry();
+          tools.register({
+            name: "echo",
+            description: "Returns the supplied text.",
+            schema: {
+              type: "object",
+              properties: { text: { type: "string" } },
+              required: ["text"],
+            },
+            async run(args) {
+              return `echo:${args.text}`;
+            },
+          });
+
+          let calls = 0;
+          const model = {
+            async chat() {
+              calls += 1;
+              if (calls === 1) {
+                return {
+                  content: "",
+                  toolCalls: [{
+                    id: "call-1",
+                    name: "echo",
+                    arguments: { text: "smoke" },
+                  }],
+                };
+              }
+
+              return { content: "smoke test passed" };
+            },
+          };
+
+          const answer = await new ReactAgent().run({
+            userInput: "Run the smoke test.",
+            model,
+            tools,
+            memory: new SessionMemory("You are a test agent."),
+            promptBuilder: new PromptBuilder("You are a test agent."),
+          });
+
+          if (answer !== "smoke test passed" || calls !== 2) {
+            throw new Error(`Unexpected Agent result: ${answer}; model calls: ${calls}`);
+          }
+
+          console.log("Agent smoke test passed.");
+          EOF
