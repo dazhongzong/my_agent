@@ -73,8 +73,12 @@ npm run dev:watch
 
 交互模式中可以使用以下会话命令：
 
+- `/help`：查看 CLI 命令、提示和补全说明
+- `/tools`：查看当前已注册工具
 - `/history`：查看每条会话的编号和上一条会话编号
 - `/rollback <编号>`：回滚到指定会话，之后的新消息从该会话继续
+
+CLI 的交互层位于 `src/runtime/interactiveCli.ts`，负责命令处理、提示、Tab 补全和运行中的输入队列；`src/runtime/cli.ts` 只负责初始化配置、模型客户端、工具注册、memory 和 Agent 策略。
 
 也可以执行单次请求：
 

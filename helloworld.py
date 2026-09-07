@@ -1,1 +1,1 @@
-print("hello typescript")  
+print("hello 你好")  
