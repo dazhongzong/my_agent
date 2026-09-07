@@ -1,4 +1,5 @@
-export type AgentMode = "react" | "plan_execute" | "multi_agent";
+import type { AgentMode } from "./types.ts";
+
 export type ModelProvider = "openai" | "github";
 
 function defaultSessionMemoryFile(): string {

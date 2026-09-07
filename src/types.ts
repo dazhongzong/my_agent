@@ -44,7 +44,7 @@ export type Skill = {
   warnings: string[];
 };
 
-export type AgentMode = "react" | "plan_execute" | "multi_agent";
+export type AgentMode = string;
 
 export type AgentContext = {
   userInput: string;

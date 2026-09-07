@@ -1,4 +1,5 @@
 import type { AgentContext, AgentStrategy } from "../types.ts";
+import { registerAgent } from "./agentRegistry.ts";
 
 export class PlanExecuteAgent implements AgentStrategy {
     async run(context: AgentContext): Promise<string> {
@@ -35,3 +36,5 @@ export class PlanExecuteAgent implements AgentStrategy {
         return summary;
     }
 }
+
+registerAgent("plan_execute", () => new PlanExecuteAgent());

@@ -1,4 +1,4 @@
-import { config, type AgentMode } from "../config.ts";
+import { config } from "../config.ts";
 import { OpenAICompatClient } from "../model_client/openaiCompatClient.ts";
 import { PromptBuilder } from "../prompt_builder/promptBuilder.ts";
 import { SessionMemory } from "../memory/sessionMemory.ts";
@@ -7,7 +7,7 @@ import { createAgent } from "../agents/agentFactory.ts";
 import { InteractiveCli } from "./interactiveCli.ts";
 import { defaultSkillRoots, setActiveSkillRegistry, SkillRegistry } from "../skill_registry/skillRegistry.ts";
 import { readdir } from "node:fs/promises";
-import type { Tool } from "../types.ts";
+import type { AgentMode, Tool } from "../types.ts";
 
 function isTool(value: unknown): value is Tool {
   if (!value || typeof value !== "object") {
