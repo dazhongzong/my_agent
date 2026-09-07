@@ -102,6 +102,8 @@ AGENT_MODE=react
 
 可选值为 `react`、`plan_execute` 和 `multi_agent`。
 
+Agent 模式由 `agentFactory` 通过注册表创建。项目内置的 Agent 会在各自文件中主动注册自己，因此新增模式时不需要在工厂里写 `switch` 分支。
+
 ## 项目结构
 
 ```text
@@ -110,13 +112,12 @@ src/
 ├── config.ts                        # 模型、Provider 和 Agent 配置
 ├── types.ts                         # Message、Tool、Agent 等核心类型
 ├── agents/
-│   ├── agentFactory.ts              # 根据模式创建 Agent
-│   ├── reactAgent.ts                # ReAct 工具调用循环
-│   ├── planExecuteAgent.ts          # 规划-执行流程
+│   ├── agentFactory.ts              # Agent 工厂入口，按模式创建已注册 Agent
+│   ├── agentRegistry.ts             # Agent 模式注册表
+│   ├── reactAgent.ts                # ReAct 工具调用循环，并注册 react 模式
+│   ├── planExecuteAgent.ts          # 规划-执行流程，并注册 plan_execute 模式
 │   └── multiAgent/
-│       └── supervisor.ts            # 多 Agent 协作流程
-├── loop/
-│   └── agentLoop.ts                 # 通用 LLM/Tool 循环实现
+│       └── supervisor.ts            # 多 Agent 协作流程，并注册 multi_agent 模式
 ├── memory/
 │   └── sessionMemory.ts             # 当前会话的消息历史
 ├── model_client/
@@ -220,6 +221,55 @@ export const demoTool: Tool = {
 ```
 
 重新启动 CLI 后，工具会被自动发现并注册，不需要修改 `cli.ts`。
+
+## 添加新 Agent 模式
+
+每个 Agent 模式实现 `AgentStrategy` 接口，并在自己的文件中主动注册到 Agent 注册表。
+
+例如新增 `reflection` 模式：
+
+```ts
+import type { AgentContext, AgentStrategy } from "../types.ts";
+import { registerAgent } from "./agentRegistry.ts";
+
+export class ReflectionAgent implements AgentStrategy {
+   async run(context: AgentContext): Promise<string> {
+      context.memory.addUserMessage(context.userInput);
+      const response = await context.model.chat(
+         context.memory.getHistory(),
+         context.tools.list(),
+      );
+
+      const finalText = response.content || "No response.";
+      context.memory.addAssistantMessage(finalText);
+      return finalText;
+   }
+}
+
+registerAgent("reflection", () => new ReflectionAgent());
+```
+
+然后在 `src/agents/agentFactory.ts` 中导入一次该文件，让模块加载时执行注册逻辑：
+
+```ts
+import "./reflectionAgent.ts";
+```
+
+之后即可通过命令行选择该模式：
+
+```powershell
+npm run dev -- --mode=reflection "分析这个方案并给出改进建议"
+```
+
+`agentFactory.ts` 只负责创建已注册的 Agent：
+
+```ts
+export function createAgent(mode: AgentMode = "react"): AgentStrategy {
+   return createRegisteredAgent(mode);
+}
+```
+
+这种方式把模式声明放在 Agent 自己的文件里，工厂只依赖注册表，不再随着模式增加而不断扩展 `switch`。
 
 ## 构建和生产运行
 
