@@ -242,3 +242,41 @@ npm start
 | `npm run dev` | 使用 `tsx` 直接运行 TypeScript，并进入 CLI 交互模式 |
 | `npm run build` | 将 `src` 编译到 `dist` |
 | `npm start` | 运行 `dist/index.js` |
+
+## Skills
+
+MyAgent supports Pi-style skills. A skill is a directory containing a `SKILL.md` file with YAML frontmatter and Markdown instructions.
+
+Supported skill roots:
+
+- `.pi/skills`
+- `.agents/skills`
+- `skills`
+
+Minimal skill format:
+
+```markdown
+---
+name: typescript-coding
+description: Use when implementing, refactoring, or reviewing TypeScript code in this project.
+---
+
+# TypeScript Coding
+
+Follow the existing project style before introducing new abstractions.
+```
+
+Rules:
+
+- `description` is required.
+- `name` should match `^[a-z0-9][a-z0-9_-]{0,63}$`.
+- If `name` is omitted, the skill directory name is used.
+- `disable-model-invocation: true` keeps the skill out of automatic model selection but still allows manual use.
+
+Runtime behavior:
+
+- At startup, MyAgent scans skill roots and loads every `SKILL.md`.
+- The system prompt receives only skill names, descriptions, and `skill://...` read paths.
+- The model can call `read_file` with `skill://<name>/SKILL.md` to inspect a skill before applying it.
+- In interactive mode, use `/skills` to list skills.
+- Use `/skill:<name> <task>` to force the next task to use a specific skill.

@@ -33,6 +33,17 @@ export type Tool = {
   run: (args: Record<string, any>) => Promise<string>;
 };
 
+export type Skill = {
+  name: string;
+  description: string;
+  filePath: string;
+  baseDir: string;
+  body: string;
+  metadata: Record<string, string | boolean | string[]>;
+  disableModelInvocation: boolean;
+  warnings: string[];
+};
+
 export type AgentMode = "react" | "plan_execute" | "multi_agent";
 
 export type AgentContext = {

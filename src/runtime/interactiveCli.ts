@@ -1,6 +1,7 @@
 import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 import type { SessionMemory } from "../memory/sessionMemory.ts";
+import { formatSkillForPrompt, type SkillRegistry } from "../skill_registry/skillRegistry.ts";
 import type { ToolRegistry } from "../tool_registry/toolRegistry.ts";
 
 type AgentRunner = (message: string) => Promise<void>;
@@ -21,6 +22,16 @@ const cliCommands: CliCommand[] = [
     name: "/tools",
     usage: "/tools",
     description: "List registered tools.",
+  },
+  {
+    name: "/skills",
+    usage: "/skills",
+    description: "List discovered skills.",
+  },
+  {
+    name: "/skill:",
+    usage: "/skill:<name> <task>",
+    description: "Run the next task with a specific skill.",
   },
   {
     name: "/history",
@@ -48,6 +59,7 @@ export class InteractiveCli {
   constructor(
     private readonly memory: SessionMemory,
     private readonly tools: ToolRegistry,
+    private readonly skills: SkillRegistry,
     private readonly runAgent: AgentRunner,
   ) {}
 
@@ -85,6 +97,19 @@ export class InteractiveCli {
         .filter((candidate) => {
           const candidateId = candidate.slice(`${leadingWhitespace}/rollback `.length);
           return candidate.startsWith(line) || candidateId.startsWith(idPrefix);
+        });
+
+      return [matches, line];
+    }
+
+    if (trimmedStart.startsWith("/skill:")) {
+      const skillPrefix = trimmedStart.slice("/skill:".length);
+      const matches = this.skills
+        .list()
+        .map((skill) => `${leadingWhitespace}/skill:${skill.name}`)
+        .filter((candidate) => {
+          const candidateName = candidate.slice(`${leadingWhitespace}/skill:`.length);
+          return candidate.startsWith(line) || candidateName.startsWith(skillPrefix);
         });
 
       return [matches, line];
@@ -149,6 +174,16 @@ export class InteractiveCli {
       return;
     }
 
+    if (message === "/skills") {
+      this.printSkills();
+      return;
+    }
+
+    if (message.startsWith("/skill:")) {
+      await this.runWithSkill(message);
+      return;
+    }
+
     if (message === "/history") {
       this.printHistory();
       return;
@@ -183,6 +218,21 @@ export class InteractiveCli {
     console.log("\nTools:");
     for (const tool of tools) {
       console.log(`  ${tool.name.padEnd(22)} ${tool.description}`);
+    }
+    console.log();
+  }
+
+  private printSkills(): void {
+    const skills = this.skills.list();
+    if (skills.length === 0) {
+      console.log("\nNo skills found. Add skills under .pi/skills, .agents/skills, or skills.\n");
+      return;
+    }
+
+    console.log("\nSkills:");
+    for (const skill of skills) {
+      const autoInvoke = skill.disableModelInvocation ? "manual" : "auto";
+      console.log(`  ${skill.name.padEnd(22)} ${skill.description} [${autoInvoke}]`);
     }
     console.log();
   }
@@ -226,6 +276,46 @@ export class InteractiveCli {
     } catch (error: unknown) {
       const errorMessage = error instanceof Error ? error.message : "Unknown error";
       console.error(`${errorMessage}\n`);
+    }
+  }
+
+  private async runWithSkill(message: string): Promise<void> {
+    const [rawName = "", ...taskParts] = message.slice("/skill:".length).trim().split(/\s+/);
+    const skillName = rawName.trim();
+    const task = taskParts.join(" ").trim();
+
+    if (!skillName) {
+      console.error("Usage: /skill:<name> <task>");
+      this.printSkills();
+      return;
+    }
+
+    const skill = this.skills.get(skillName);
+    if (!skill) {
+      console.error(`Skill not found: ${skillName}`);
+      this.printSkills();
+      return;
+    }
+
+    if (!task) {
+      console.error(`Usage: /skill:${skillName} <task>\n`);
+      return;
+    }
+
+    if (this.agentRunning) {
+      this.memory.enqueueUserMessage(`${formatSkillForPrompt(skill)}\n\nTask:\n${task}`);
+      console.log(`Message queued with skill: ${skill.name}\n`);
+      return;
+    }
+
+    this.agentRunning = true;
+    try {
+      await this.runAgent(`${formatSkillForPrompt(skill)}\n\nTask:\n${task}`);
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+      console.error(`Request failed: ${errorMessage}`);
+    } finally {
+      this.agentRunning = false;
     }
   }
 

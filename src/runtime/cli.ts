@@ -5,6 +5,7 @@ import { SessionMemory } from "../memory/sessionMemory.ts";
 import { ToolRegistry } from "../tool_registry/toolRegistry.ts";
 import { createAgent } from "../agents/agentFactory.ts";
 import { InteractiveCli } from "./interactiveCli.ts";
+import { defaultSkillRoots, setActiveSkillRegistry, SkillRegistry } from "../skill_registry/skillRegistry.ts";
 import { readdir } from "node:fs/promises";
 import type { Tool } from "../types.ts";
 
@@ -51,6 +52,9 @@ export async function runCli(): Promise<void> {
 
   const registry = new ToolRegistry();
   await registerTools(registry);
+  const skills = new SkillRegistry(defaultSkillRoots());
+  await skills.load();
+  setActiveSkillRegistry(skills);
 
   const client = new OpenAICompatClient(
     config.apiKey,
@@ -64,7 +68,8 @@ export async function runCli(): Promise<void> {
     },
     config.contextWindowTokens,
   );
-  const promptBuilder = new PromptBuilder(config.systemPrompt);
+  const skillPromptContext = skills.buildPromptContext();
+  const promptBuilder = new PromptBuilder(config.systemPrompt, skillPromptContext || undefined);
   const memory = new SessionMemory(config.systemPrompt);
   const agent = createAgent(mode);
 
@@ -93,5 +98,5 @@ export async function runCli(): Promise<void> {
     return;
   }
 
-  await new InteractiveCli(memory, registry, runAgent).start();
+  await new InteractiveCli(memory, registry, skills, runAgent).start();
 }
