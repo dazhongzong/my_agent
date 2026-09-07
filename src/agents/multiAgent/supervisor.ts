@@ -2,13 +2,6 @@ import type { AgentContext, AgentStrategy } from "../../types.ts";
 
 export class MultiAgentSupervisor implements AgentStrategy {
     async run(context: AgentContext): Promise<string> {
-        const systemPrompt = context.promptBuilder.build();
-        const history = context.memory.getHistory();
-
-        if (history.length === 0 || history[0]?.content !== systemPrompt) {
-            context.memory.addUserMessage(systemPrompt);
-        }
-
         context.memory.addUserMessage(context.userInput);
 
         context.memory.drainPendingMessages();

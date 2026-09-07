@@ -70,7 +70,11 @@ export async function runCli(): Promise<void> {
   );
   const skillPromptContext = skills.buildPromptContext();
   const promptBuilder = new PromptBuilder(config.systemPrompt, skillPromptContext || undefined);
-  const memory = new SessionMemory(config.systemPrompt);
+  const memory = new SessionMemory(promptBuilder.build(), {
+    persistenceFilePath: config.sessionMemoryFile,
+  });
+  console.log(`Session memory file: ${config.sessionMemoryFile}`);
+  console.log(`Loaded conversation nodes: ${memory.getConversations().length}`);
   const agent = createAgent(mode);
 
   const runAgent = async (message: string): Promise<void> => {
@@ -91,6 +95,7 @@ export async function runCli(): Promise<void> {
     const usage = client.getContextUsage();
     const percentage = Math.round((usage.usedTokens / usage.maxTokens) * 100);
     console.log(`[context] approx ${usage.usedTokens} / ${usage.maxTokens} tokens (${percentage}%)`);
+    await memory.flush();
   };
 
   if (userInput) {

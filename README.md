@@ -280,3 +280,39 @@ Runtime behavior:
 - The model can call `read_file` with `skill://<name>/SKILL.md` to inspect a skill before applying it.
 - In interactive mode, use `/skills` to list skills.
 - Use `/skill:<name> <task>` to force the next task to use a specific skill.
+
+## Session Persistence
+
+Conversation memory is saved locally as JSON Lines.
+
+Default path:
+
+```text
+.myagent/sessions/session-<timestamp>.jsonl
+```
+
+You can override it with:
+
+```dotenv
+SESSION_MEMORY_FILE=.myagent/sessions/current.jsonl
+```
+
+Each line is one conversation node shaped like `ConversationRecord`:
+
+```json
+{"id":1,"previousId":null,"userInput":"hello","messages":[{"role":"user","content":"hello"},{"role":"assistant","content":"hi"}]}
+```
+
+The file is rewritten after each memory change so each node appears once with its latest messages. Rollback rewrites the file to keep only the remaining nodes.
+
+### Loading an existing session
+
+To continue a previous session, start MyAgent with the same `SESSION_MEMORY_FILE` path:
+
+```dotenv
+SESSION_MEMORY_FILE=.myagent/sessions/current.jsonl
+```
+
+On startup, `SessionMemory` reads that JSONL file, restores each conversation node, and sets the next node id to `max(existing id) + 1`. If the file does not exist, MyAgent starts with an empty session and creates the file after the first memory write.
+
+Session writes are asynchronous and serialized in memory. `SessionMemory.flush()` waits for pending writes; the CLI calls it after one-shot runs and before interactive shutdown, so the latest conversation nodes are durable before exit.

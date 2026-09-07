@@ -3,3 +3,4 @@ dist/
 .env
 .DS_Store
 agent-from-zero-guide.md
+.myagent/

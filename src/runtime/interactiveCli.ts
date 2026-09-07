@@ -79,6 +79,7 @@ export class InteractiveCli {
       await new Promise<void>((resolve) => this.readline.once("close", resolve));
     } finally {
       this.readline.close();
+      await this.memory.flush();
       console.log("\nAgent exited.");
     }
   }

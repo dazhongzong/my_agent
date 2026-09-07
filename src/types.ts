@@ -61,6 +61,7 @@ export type AgentContext = {
     enqueueUserMessage(content: string): void;
     drainPendingMessages(): number;
     hasPendingMessages(): boolean;
+    flush(): Promise<void>;
     addAssistantMessage(content: string): void;
     addToolResult(toolCallId: string, name: string, content: string): void;
   };

@@ -1,6 +1,11 @@
 export type AgentMode = "react" | "plan_execute" | "multi_agent";
 export type ModelProvider = "openai" | "github";
 
+function defaultSessionMemoryFile(): string {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  return `.myagent/sessions/session-${timestamp}.jsonl`;
+}
+
 export const config = {
   modelProvider: (process.env.MODEL_PROVIDER as ModelProvider | undefined) ?? "openai",
   apiKey:
@@ -20,6 +25,7 @@ export const config = {
     Number.parseInt(process.env.CONTEXT_WINDOW_TOKENS ?? "8192", 10) || 8192,
   ),
   agentMode: (process.env.AGENT_MODE as AgentMode | undefined) ?? "react",
+  sessionMemoryFile: process.env.SESSION_MEMORY_FILE ?? defaultSessionMemoryFile(),
   systemPrompt:
     process.env.AGENT_SYSTEM_PROMPT ??
     "You are a helpful assistant. Use tools when appropriate and keep answers concise.",
