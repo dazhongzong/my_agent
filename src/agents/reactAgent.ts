@@ -32,13 +32,8 @@ export class ReactAgent implements AgentStrategy {
                         continue;
                     }
 
-                    try {
-                        const result = await tool.run(call.arguments as Record<string, any>);
-                        context.memory.addToolResult(call.id, tool.name, result);
-                    } catch (error: unknown) {
-                        const message = error instanceof Error ? error.message : "Unknown tool error";
-                        context.memory.addToolResult(call.id, tool.name, `Tool failed: ${message}`);
-                    }
+                    const result = await context.tools.execute(call.name, call.arguments as Record<string, any>);
+                    context.memory.addToolResult(call.id, tool.name, result.content);
                 }
 
                 if (hasParseError) {

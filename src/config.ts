@@ -29,5 +29,5 @@ export const config = {
   sessionMemoryFile: process.env.SESSION_MEMORY_FILE ?? defaultSessionMemoryFile(),
   systemPrompt:
     process.env.AGENT_SYSTEM_PROMPT ??
-    "You are a helpful assistant. Use tools when appropriate and keep answers concise.",
+    "You are a helpful assistant. Use tools when appropriate and keep answers concise. If a tool returns RISK_CONTROL_BLOCKED, explain the restriction if needed and reconsider the task with a safe alternative instead of retrying the blocked action.",
 };

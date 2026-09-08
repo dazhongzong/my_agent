@@ -7,6 +7,7 @@
     "dev": "node --env-file=.env --import=tsx src/index.ts",
     "dev:watch": "node --watch --env-file=.env --import=tsx src/index.ts",
     "build": "tsc --project tsconfig.json",
+    "test": "npm run build && node --test dist/risk_control/toolRiskGuard.test.js",
     "start": "node --env-file=.env dist/index.js"
   },
   "devDependencies": {

@@ -54,6 +54,7 @@ export type AgentContext = {
   tools: {
     list(): Tool[];
     get(name: string): Tool | undefined;
+    execute(name: string, args: Record<string, any>): Promise<ToolExecutionResult>;
   };
   memory: {
     getHistory(): Message[];
@@ -68,6 +69,11 @@ export type AgentContext = {
   promptBuilder: {
     build(): string;
   };
+};
+
+export type ToolExecutionResult = {
+  status: "executed" | "blocked" | "failed";
+  content: string;
 };
 
 export interface AgentStrategy {
