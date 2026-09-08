@@ -76,9 +76,13 @@ export class SessionMemory {
   }
 
   getHistory(): Message[] {
+    const currentConversation = this.conversations.at(-1);
+    const conversationChain = currentConversation
+      ? this.getConversationChain(currentConversation.id)
+      : [];
     return [
       this.systemMessage,
-      ...this.conversations.flatMap((conversation) => conversation.messages),
+      ...conversationChain.flatMap((conversation) => conversation.messages),
     ];
   }
 
@@ -91,15 +95,9 @@ export class SessionMemory {
   }
 
   rollbackTo(conversationId: number): void {
-    const conversationIndex = this.conversations.findIndex(
-      (conversation) => conversation.id === conversationId,
-    );
-
-    if (conversationIndex === -1) {
-      throw new Error(`Conversation not found: ${conversationId}`);
-    }
-
-    this.conversations = this.conversations.slice(0, conversationIndex + 1);
+    // Keep exactly the selected node's ancestry. This works even when records
+    // are not stored in parent-before-child order.
+    this.conversations = this.getConversationChain(conversationId);
     this.persist();
   }
 
@@ -110,6 +108,41 @@ export class SessionMemory {
     }
 
     return conversation;
+  }
+
+  /**
+   * Builds the active branch by following parent pointers rather than relying
+   * on the JSONL file order. The returned messages are root-to-current.
+   */
+  private getConversationChain(conversationId: number): ConversationRecord[] {
+    const conversationsById = new Map<number, ConversationRecord>();
+    for (const conversation of this.conversations) {
+      if (conversationsById.has(conversation.id)) {
+        throw new Error(`Invalid session: duplicate conversation id ${conversation.id}.`);
+      }
+      conversationsById.set(conversation.id, conversation);
+    }
+
+    const chain: ConversationRecord[] = [];
+    const visited = new Set<number>();
+    let currentId: number | null = conversationId;
+
+    while (currentId !== null) {
+      if (visited.has(currentId)) {
+        throw new Error(`Invalid session: cycle detected at conversation ${currentId}.`);
+      }
+
+      const conversation = conversationsById.get(currentId);
+      if (!conversation) {
+        throw new Error(`Invalid session: conversation ${currentId} does not exist.`);
+      }
+
+      visited.add(currentId);
+      chain.push(conversation);
+      currentId = conversation.previousId;
+    }
+
+    return chain.reverse();
   }
 
   private persist(): void {

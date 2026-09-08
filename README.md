@@ -7,7 +7,7 @@ MyAgent 是一个基于 TypeScript 的最小 Agent 原型，用于学习 LLM、�
 - ReAct Agent：模型和工具之间循环执行，直到得到最终回答
 - Plan-Execute Agent：先生成步骤，再逐步执行
 - Multi-Agent Supervisor：使用规划者和工作者协作完成任务
-- Session memory：在一次 CLI 运行期间保留多轮对话历史，并支持按会话编号回滚
+- Session memory：按 `id` / `previousId` 保存当前会话分支，并支持按会话编号回滚
 - 输入队列：模型请求期间仍可输入消息，消息会在下一次模型调用前加入会话
 - 动态工具加载：启动时自动扫描并注册 `src/tools` 下的工具
 - 工具调用风控：工具实际执行前会检查高风险 shell 命令、越界/敏感文件写入，以及配置为禁用的工具；拦截原因会作为 tool result 返回给模型以便重新规划
@@ -50,7 +50,7 @@ GITHUB_BASE_URL=https://models.inference.ai.azure.com
 GITHUB_MODEL=openai/gpt-4o-mini
 ```
 
-`CONTEXT_WINDOW_TOKENS` 用于限制每次发送给模型的上下文大小，默认值为 `8192`。项目会优先保留系统提示和最近的消息，并在每次请求后显示本次发送上下文的估算 token 数；该数值基于文本长度估算，不等同于服务商的精确计费 token。
+`CONTEXT_WINDOW_TOKENS` 用于限制每次发送给模型的上下文大小，默认值为 `8192`。每次调用模型时，MyAgent 会从当前会话节点沿 `previousId` 回溯到根节点，再按时间顺序发送这条分支上的完整消息；不会使用不属于当前分支的记录，也不会压缩会话内容。若消息总量超出窗口，项目会优先保留系统提示和最近的消息，并在每次请求后显示本次发送上下文的估算 token 数；该数值基于文本长度估算，不等同于服务商的精确计费 token。
 
 不要把真实 API Key 或 Token 提交到 Git 仓库。
 
@@ -76,8 +76,8 @@ npm run dev:watch
 
 - `/help`：查看 CLI 命令、提示和补全说明
 - `/tools`：查看当前已注册工具
-- `/history`：查看每条会话的编号和上一条会话编号
-- `/rollback <编号>`：回滚到指定会话，之后的新消息从该会话继续
+- `/history`：查看当前保存的会话节点编号及其父节点编号
+- `/rollback <编号>`：回滚到指定节点，仅保留该节点及其祖先节点；之后的新消息从该节点继续
 
 CLI 的交互层位于 `src/runtime/interactiveCli.ts`，负责命令处理、提示、Tab 补全和运行中的输入队列；`src/runtime/cli.ts` 只负责初始化配置、模型客户端、工具注册、memory 和 Agent 策略。
 
@@ -120,7 +120,7 @@ src/
 │   └── multiAgent/
 │       └── supervisor.ts            # 多 Agent 协作流程，并注册 multi_agent 模式
 ├── memory/
-│   └── sessionMemory.ts             # 当前会话的消息历史
+│   └── sessionMemory.ts             # 当前会话分支、持久化和历史组装
 ├── model_client/
 │   └── openaiCompatClient.ts        # OpenAI 兼容模型客户端
 ├── prompt_builder/
@@ -145,6 +145,7 @@ CLI runtime
     │
     ├── 扫描并动态加载 src/tools/*
     ├── 创建模型客户端、Prompt 和 Session memory
+    ├── 从当前节点沿 previousId 构建会话分支上下文
     └── 根据 Agent 模式执行任务
                │
                ▼
@@ -342,38 +343,42 @@ Runtime behavior:
 - In interactive mode, use `/skills` to list skills.
 - Use `/skill:<name> <task>` to force the next task to use a specific skill.
 
-## Session Persistence
+## 会话持久化与上下文
 
-Conversation memory is saved locally as JSON Lines.
+会话记忆以本地 JSON Lines（JSONL）保存。
 
-Default path:
+默认路径：
 
 ```text
 .myagent/sessions/session-<timestamp>.jsonl
 ```
 
-You can override it with:
+可通过环境变量覆盖：
 
 ```dotenv
 SESSION_MEMORY_FILE=.myagent/sessions/current.jsonl
 ```
 
-Each line is one conversation node shaped like `ConversationRecord`:
+每一行都是一个 `ConversationRecord` 会话节点：
 
 ```json
 {"id":1,"previousId":null,"userInput":"hello","messages":[{"role":"user","content":"hello"},{"role":"assistant","content":"hi"}]}
 ```
 
-The file is rewritten after each memory change so each node appears once with its latest messages. Rollback rewrites the file to keep only the remaining nodes.
+每次记忆发生变化后，文件都会重写，确保每个节点只保留一行最新内容。当前节点是最新写入的节点；新节点的 `previousId` 指向它的父节点。
 
-### Loading an existing session
+构建模型上下文时，MyAgent 从当前节点沿 `previousId` 回溯至根节点，再恢复为时间正序。因此，JSONL 中即使存在不属于当前祖先链的节点，也不会被发送给模型。会话内容不会被压缩；完整分支仍会受 `CONTEXT_WINDOW_TOKENS` 限制。
 
-To continue a previous session, start MyAgent with the same `SESSION_MEMORY_FILE` path:
+`/rollback <id>` 会将会话回退到指定节点，并重写 JSONL，仅保留该节点及其祖先链。
+
+### 加载已有会话
+
+要继续此前的会话，请使用同一个 `SESSION_MEMORY_FILE` 路径启动 MyAgent：
 
 ```dotenv
 SESSION_MEMORY_FILE=.myagent/sessions/current.jsonl
 ```
 
-On startup, `SessionMemory` reads that JSONL file, restores each conversation node, and sets the next node id to `max(existing id) + 1`. If the file does not exist, MyAgent starts with an empty session and creates the file after the first memory write.
+启动时，`SessionMemory` 会读取 JSONL，恢复会话节点，并将下一个节点 ID 设为 `max(existing id) + 1`。若文件不存在，则从空会话开始，并在首次写入记忆后创建文件。
 
-Session writes are asynchronous and serialized in memory. `SessionMemory.flush()` waits for pending writes; the CLI calls it after one-shot runs and before interactive shutdown, so the latest conversation nodes are durable before exit.
+会话写入在内存中异步串行化。`SessionMemory.flush()` 会等待待写入任务完成；CLI 会在单次请求结束后和交互式退出前调用它，确保最新会话节点已持久化。
