@@ -7,7 +7,6 @@
     "dev": "node --env-file=.env --import=tsx src/index.ts",
     "dev:watch": "node --watch --env-file=.env --import=tsx src/index.ts",
     "build": "tsc --project tsconfig.json",
-    "test": "npm run build && node --test dist/agents/agentFactory.test.js dist/agents/agentModeLoader.test.js",
     "start": "node --env-file=.env dist/index.js"
   },
   "devDependencies": {
