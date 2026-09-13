@@ -310,8 +310,17 @@ npm start
 | --- | --- |
 | `npm run dev` | 使用 `tsx` 直接运行 TypeScript，并进入 CLI 交互模式 |
 | `npm run build` | 将 `src` 编译到 `dist` |
-| `npm test` | 编译并运行 Agent 自动发现、注册和工具循环测试 |
 | `npm start` | 运行 `dist/index.js` |
+
+## CI
+
+GitHub Actions 工作流位于 `.github/workflows/test.yml`，在向 `main` 推送或提交目标为 `main` 的 Pull Request 时执行：
+
+1. 使用 Node.js 22 和 `npm ci` 安装依赖。
+2. 使用 `npm run build` 编译 TypeScript。
+3. 对编译后的代码执行冒烟测试，验证三个内置模式自动注册，以及 ReAct 工具执行和结果写回上下文。
+
+冒烟测试使用 Mock 模型，不需要 `.env`、API Key 或外部模型服务。当前仓库没有部署步骤。
 
 ## Skills
 
