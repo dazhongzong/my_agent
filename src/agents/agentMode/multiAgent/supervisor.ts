@@ -1,5 +1,5 @@
-import type { AgentContext, AgentStrategy } from "../../types.ts";
-import { registerAgent } from "../agentRegistry.ts";
+import type { AgentContext, AgentStrategy } from "../../../types.ts";
+import type { AgentModeDefinition } from "../../agentRegistry.ts";
 
 export class MultiAgentSupervisor implements AgentStrategy {
     async run(context: AgentContext): Promise<string> {
@@ -29,4 +29,7 @@ export class MultiAgentSupervisor implements AgentStrategy {
     }
 }
 
-registerAgent("multi_agent", () => new MultiAgentSupervisor());
+export const agentMode: AgentModeDefinition = {
+    mode: "multi_agent",
+    create: () => new MultiAgentSupervisor(),
+};

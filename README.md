@@ -10,6 +10,7 @@ MyAgent 是一个基于 TypeScript 的最小 Agent 原型，用于学习 LLM、�
 - Session memory：按 `id` / `previousId` 保存当前会话分支，并支持按会话编号回滚
 - 输入队列：模型请求期间仍可输入消息，消息会在下一次模型调用前加入会话
 - 动态工具加载：启动时自动扫描并注册 `src/tools` 下的工具
+- 动态 Agent 模式加载：工厂自动扫描并注册 `src/agents/agentMode` 下的模式（包括子目录）
 - 工具调用风控：工具实际执行前会检查高风险 shell 命令、越界/敏感文件写入，以及配置为禁用的工具；拦截原因会作为 tool result 返回给模型以便重新规划
 - 内置天气查询、读取/创建/修改文件和执行 shell 命令工具
 
@@ -103,7 +104,7 @@ AGENT_MODE=react
 
 可选值为 `react`、`plan_execute` 和 `multi_agent`。
 
-Agent 模式由 `agentFactory` 通过注册表创建。项目内置的 Agent 会在各自文件中主动注册自己，因此新增模式时不需要在工厂里写 `switch` 分支。
+Agent 模式由 `agentFactory` 自动扫描 `src/agents/agentMode`（包括子目录），加载模块导出的 `agentMode` 定义并注册，再通过注册表创建。新增模式不需要修改工厂，也不需要手动调用 `registerAgent`。
 
 ## 项目结构
 
@@ -113,12 +114,14 @@ src/
 ├── config.ts                        # 模型、Provider 和 Agent 配置
 ├── types.ts                         # Message、Tool、Agent 等核心类型
 ├── agents/
-│   ├── agentFactory.ts              # Agent 工厂入口，按模式创建已注册 Agent
+│   ├── agentFactory.ts              # 自动加载模式，按模式创建已注册 Agent
 │   ├── agentRegistry.ts             # Agent 模式注册表
-│   ├── reactAgent.ts                # ReAct 工具调用循环，并注册 react 模式
-│   ├── planExecuteAgent.ts          # 规划-执行流程，并注册 plan_execute 模式
-│   └── multiAgent/
-│       └── supervisor.ts            # 多 Agent 协作流程，并注册 multi_agent 模式
+│   ├── agentModeLoader.ts           # 递归扫描、加载和验证模式定义
+│   └── agentMode/
+│       ├── reactAgent.ts            # ReAct 工具调用循环，导出 react 模式
+│       ├── planExecuteAgent.ts      # 规划-执行流程，导出 plan_execute 模式
+│       └── multiAgent/
+│           └── supervisor.ts        # 多 Agent 协作流程，导出 multi_agent 模式
 ├── memory/
 │   └── sessionMemory.ts             # 当前会话分支、持久化和历史组装
 ├── model_client/
@@ -144,6 +147,7 @@ src/
 CLI runtime
     │
     ├── 扫描并动态加载 src/tools/*
+    ├── Agent 工厂自动扫描并注册 src/agents/agentMode 下的模式
     ├── 创建模型客户端、Prompt 和 Session memory
     ├── 从当前节点沿 previousId 构建会话分支上下文
     └── 根据 Agent 模式执行任务
@@ -236,13 +240,13 @@ export const demoTool: Tool = {
 
 ## 添加新 Agent 模式
 
-每个 Agent 模式实现 `AgentStrategy` 接口，并在自己的文件中主动注册到 Agent 注册表。
+在 `src/agents/agentMode` 下创建 TypeScript 文件（也可以放在子目录），实现 `AgentStrategy` 接口，并导出名为 `agentMode` 的模式定义。
 
-例如新增 `reflection` 模式：
+例如创建 `src/agents/agentMode/reflectionAgent.ts`，新增 `reflection` 模式：
 
 ```ts
-import type { AgentContext, AgentStrategy } from "../types.ts";
-import { registerAgent } from "./agentRegistry.ts";
+import type { AgentContext, AgentStrategy } from "../../types.ts";
+import type { AgentModeDefinition } from "../agentRegistry.ts";
 
 export class ReflectionAgent implements AgentStrategy {
    async run(context: AgentContext): Promise<string> {
@@ -258,30 +262,33 @@ export class ReflectionAgent implements AgentStrategy {
    }
 }
 
-registerAgent("reflection", () => new ReflectionAgent());
+export const agentMode: AgentModeDefinition = {
+   mode: "reflection",
+   create: () => new ReflectionAgent(),
+};
 ```
 
-然后在 `src/agents/agentFactory.ts` 中导入一次该文件，让模块加载时执行注册逻辑：
-
-```ts
-import "./reflectionAgent.ts";
-```
-
-之后即可通过命令行选择该模式：
+重新启动后，工厂会自动发现并注册该模式，不需要修改任何导入列表。之后即可通过命令行选择该模式：
 
 ```powershell
 npm run dev -- --mode=reflection "分析这个方案并给出改进建议"
 ```
 
-`agentFactory.ts` 只负责创建已注册的 Agent：
+工厂使用 ESM 顶层 `await` 完成初始化，因此调用者仍可以同步创建 Agent：
 
 ```ts
-export function createAgent(mode: AgentMode = "react"): AgentStrategy {
-   return createRegisteredAgent(mode);
-}
+import { createAgent } from "./agents/agentFactory.ts";
+
+const agent = createAgent("reflection");
 ```
 
-这种方式把模式声明放在 Agent 自己的文件里，工厂只依赖注册表，不再随着模式增加而不断扩展 `switch`。
+加载规则：
+
+- 开发模式加载 `.ts` 文件，编译后加载对应的 `.js` 文件；排除 `.d.ts`、`.test.*` 和 `.spec.*`。
+- 没有导出 `agentMode` 的辅助模块不会注册为模式。
+- `agentMode.mode` 必须是非空且唯一的字符串，`agentMode.create` 必须是创建 Agent 的函数；无效定义、重复模式或模块加载失败会中止初始化。
+- 模式文件不要导入 `agentFactory.ts`，以免与顶层初始化形成循环依赖；共享类型从 `types.ts` 或 `agentRegistry.ts` 导入。
+- 同一进程中工厂只初始化一次；添加或修改模式后需要重启（或使用 `dev:watch`）。
 
 ## 构建和生产运行
 
@@ -303,6 +310,7 @@ npm start
 | --- | --- |
 | `npm run dev` | 使用 `tsx` 直接运行 TypeScript，并进入 CLI 交互模式 |
 | `npm run build` | 将 `src` 编译到 `dist` |
+| `npm test` | 编译并运行 Agent 自动发现、注册和工具循环测试 |
 | `npm start` | 运行 `dist/index.js` |
 
 ## Skills

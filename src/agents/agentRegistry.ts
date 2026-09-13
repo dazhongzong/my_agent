@@ -2,6 +2,11 @@ import type { AgentMode, AgentStrategy } from "../types.ts";
 
 export type AgentCreator = () => AgentStrategy;
 
+export type AgentModeDefinition = {
+    mode: AgentMode;
+    create: AgentCreator;
+};
+
 const agentCreators = new Map<AgentMode, AgentCreator>();
 
 export function registerAgent(mode: AgentMode, creator: AgentCreator): void {
