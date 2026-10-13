@@ -7,14 +7,25 @@
     "dev": "node --env-file=.env --import=tsx src/index.ts",
     "dev:watch": "node --watch --env-file=.env --import=tsx src/index.ts",
     "build": "tsc --project tsconfig.json",
-    "start": "node --env-file=.env dist/index.js"
+    "start": "node --env-file=.env dist/index.js",
+    "api:dev": "node --env-file-if-exists=.env --import=tsx src/runtime/webServer.ts",
+    "frontend:dev": "concurrently -k \"npm run api:dev\" \"vite --config client/vite.config.ts\"",
+    "frontend:build": "vite build --config client/vite.config.ts",
+    "frontend:preview": "vite preview --config client/vite.config.ts"
   },
   "devDependencies": {
+    "@vitejs/plugin-react": "^5.0.4",
     "@types/node": "^22.10.2",
+    "@types/react": "^19.1.13",
+    "@types/react-dom": "^19.1.9",
+    "concurrently": "^9.2.1",
     "tsx": "^4.19.2",
-    "typescript": "^5.6.3"
+    "typescript": "^5.6.3",
+    "vite": "^7.1.9"
   },
   "dependencies": {
-    "openai": "^7.8.0"
+    "openai": "^7.8.0",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
   }
 }

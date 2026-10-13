@@ -18,6 +18,7 @@ export class SessionMemory {
   private readonly systemMessage: Message;
   private readonly persistenceFilePath?: string;
   private conversations: ConversationRecord[] = [];
+  private activeConversationId: number | null = null;
   private readonly pendingUserMessages: string[] = [];
   private persistenceQueue: Promise<void> = Promise.resolve();
   private nextConversationId = 1;
@@ -29,13 +30,16 @@ export class SessionMemory {
   }
 
   addUserMessage(content: string): void {
-    const previousConversation = this.conversations.at(-1);
+    const previousConversation = this.activeConversationId === null
+      ? undefined
+      : this.conversations.find(({ id }) => id === this.activeConversationId);
     this.conversations.push({
       id: this.nextConversationId++,
       previousId: previousConversation?.id ?? null,
       userInput: content,
       messages: [{ role: "user", content }],
     });
+    this.activeConversationId = this.nextConversationId - 1;
     this.persist();
   }
 
@@ -76,7 +80,9 @@ export class SessionMemory {
   }
 
   getHistory(): Message[] {
-    const currentConversation = this.conversations.at(-1);
+    const currentConversation = this.activeConversationId === null
+      ? undefined
+      : this.conversations.find(({ id }) => id === this.activeConversationId);
     const conversationChain = currentConversation
       ? this.getConversationChain(currentConversation.id)
       : [];
@@ -94,15 +100,34 @@ export class SessionMemory {
     }));
   }
 
+  getActiveConversationId(): number | null {
+    return this.activeConversationId;
+  }
+
+  selectConversation(conversationId: number | null): void {
+    if (conversationId !== null) {
+      this.getConversationChain(conversationId);
+    }
+
+    this.activeConversationId = conversationId;
+  }
+
+  startNewConversation(): void {
+    this.selectConversation(null);
+  }
+
   rollbackTo(conversationId: number): void {
     // Keep exactly the selected node's ancestry. This works even when records
     // are not stored in parent-before-child order.
     this.conversations = this.getConversationChain(conversationId);
+    this.activeConversationId = conversationId;
     this.persist();
   }
 
   private currentConversation(): ConversationRecord {
-    const conversation = this.conversations.at(-1);
+    const conversation = this.activeConversationId === null
+      ? undefined
+      : this.conversations.find(({ id }) => id === this.activeConversationId);
     if (!conversation) {
       throw new Error("Cannot add a response before a user message.");
     }
@@ -182,6 +207,7 @@ export class SessionMemory {
       .map((line, index) => parseConversationRecord(line, index + 1));
 
     this.conversations = conversations;
+    this.activeConversationId = conversations.at(-1)?.id ?? null;
     this.nextConversationId = conversations.reduce(
       (nextId, conversation) => Math.max(nextId, conversation.id + 1),
       1,

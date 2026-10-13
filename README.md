@@ -88,6 +88,38 @@ CLI 的交互层位于 `src/runtime/interactiveCli.ts`，负责命令处理、�
 npm run dev -- "帮我看一下北京的天气"
 ```
 
+### 5. 启动客户端界面
+
+项目包含一个 React + Vite 的最小客户端和 Node HTTP API。开发时运行：
+
+```powershell
+npm run frontend:dev
+```
+
+Vite 运行在 `http://localhost:5173`，API 运行在 `http://localhost:8787`。启动后在浏览器中打开前者。客户端支持 Agent 模式选择、会话消息发送和演示模式；如果没有配置 `OPENAI_API_KEY`，API 会返回本地演示回复，不会调用外部模型。
+
+生产构建：
+
+```powershell
+npm run frontend:build
+npm run frontend:preview
+```
+
+客户端源码位于 `client/`，API 入口位于 `src/runtime/webServer.ts`。API 会复用现有 Agent、工具注册表、技能和会话记忆，CLI 与客户端共享同一套 Agent 模式。
+
+客户端与后端的通信链路如下：
+
+```text
+React UI
+  └─ client/src/api.ts
+       └─ fetch /api/health、/api/sessions、/api/sessions/select、/api/chat
+            └─ Vite 开发代理 localhost:5173 → localhost:8787
+                 └─ src/runtime/webServer.ts
+                      └─ Agent / Model / ToolRegistry / SessionMemory
+```
+
+开发环境下不需要在前端代码中写 API 端口；统一请求相对路径 `/api` 即可。客户端启动和切换 Agent 模式时会调用 `/api/sessions?mode=<mode>`，后端从 `.myagent/sessions/web-<mode>.jsonl` 恢复会话列表和当前历史消息。左侧标题默认取每个会话首条用户消息的首行（过长会截断）；点击标题调用 `/api/sessions/select` 加载对应节点及其祖先链，点击 New task 则选择新的会话根节点。后续如果加入流式回复，可以在 `webServer.ts` 增加 SSE 或 WebSocket，而不需要改动 Agent 核心。
+
 ### 4. 选择 Agent 模式
 
 ```powershell
@@ -318,7 +350,8 @@ GitHub Actions 工作流位于 `.github/workflows/test.yml`，在向 `main` 推�
 
 1. 使用 Node.js 22 和 `npm ci` 安装依赖。
 2. 使用 `npm run build` 编译 TypeScript。
-3. 对编译后的代码执行冒烟测试，验证三个内置模式自动注册，以及 ReAct 工具执行和结果写回上下文。
+3. 使用 `npm run frontend:build` 构建 React 客户端。
+4. 对编译后的代码执行冒烟测试，验证三个内置模式自动注册，以及 ReAct 工具执行和结果写回上下文。
 
 冒烟测试使用 Mock 模型，不需要 `.env`、API Key 或外部模型服务。当前仓库没有部署步骤。
 
