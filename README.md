@@ -2,6 +2,10 @@
 
 MyAgent 是一个基于 TypeScript 的本地 Agent 原型，支持 CLI 和 React 客户端。它通过 OpenAI Chat Completions 兼容接口调用模型，并提供工具调用、技能加载、会话记忆和多种 Agent 模式。
 
+## 演示
+
+![MyAgent Demo](./demo.gif)
+
 ## 功能
 
 - ReAct、Plan-Execute、Multi-Agent Supervisor
